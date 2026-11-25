@@ -150,8 +150,9 @@ def verify_table_request(table_raw: str, token: str):
         return None
     if table_num < 1 or table_num > NUM_TABLES:
         return None
-    expected = make_token(table_num)
-    if not token or not hmac.compare_digest(token, expected):
+    full_expected = make_token(table_num)
+    valid_tokens = {full_expected, full_expected[:12]}
+    if not token or not any(hmac.compare_digest(token, t) for t in valid_tokens):
         return None
     return table_num
 
