@@ -1,227 +1,296 @@
-import os
-import hmac
 import hashlib
+import hmac
 import sqlite3
 from flask import Flask, request, redirect
 
 app = Flask(__name__)
-DB_NAME = 'restaurant.db'
 
-# يجب أن يطابق نفس SECRET_KEY الموجود في سكريبت توليد رموز QR
-SECRET_KEY = os.environ.get("SECRET_KEY", "PARADISE_SECRET_KEY_CHANGE_ME_2026")
-
-
-def make_table_token(table_no: int) -> str:
-    msg = f"paradise-table-{table_no}".encode("utf-8")
-    return hmac.new(SECRET_KEY.encode("utf-8"), msg, hashlib.sha256).hexdigest()[:12]
-
-
-def verify_table_token(table_no: int, token: str) -> bool:
-    if not token:
-        return False
-    expected = make_table_token(table_no)
-    return hmac.compare_digest(expected, token.strip())
-
+DB_NAME = "restaurant.db"
+SECRET_KEY = "Paradise_QR_Secret_2026_DZ"
+NUM_TABLES = 32
 
 MENU_ITEMS = [
-    ('Menu Pizza', 'Pizza Margherita', 0),
-    ('Menu Pizza', 'Pizza Champignons', 0),
-    ('Menu Pizza', 'Pizza Vegetarienne', 0),
-    ('Menu Pizza', 'Pizza Campione', 0),
-    ('Menu Pizza', 'Pizza Royale', 0),
-    ('Menu Pizza', 'Pizza 4 Fromage', 0),
-    ('Menu Pizza', 'Pizza Napolitana', 0),
-    ('Menu Pizza', 'Pizza Crevettes', 0),
-    ('Menu Pizza', 'Pizza Pecheur', 0),
-    ('Menu Pizza', 'Pizza Fruits de Mer', 0),
-    ('Menu Pizza', 'Pizza Paradise', 0),
-    ('Menu Pizza', 'Pizza Burata', 0),
-    ('Menu Pizza', 'Pizza Grand Bleu', 0),
-    ('Entrées Froides', 'Salade César', 0),
-    ('Entrées Froides', 'Salade Variée', 0),
-    ('Entrées Froides', 'Camembert Farcie aux Fruits Secs', 0),
-    ('Entrées Froides', 'Salade du Vieux Port', 0),
-    ('Entrées Froides', 'Fraîcheur Paradise au Choix du Chef', 0),
-    ('Entrées Froides', 'Carpaccio de Crevette', 0),
-    ('Entrées Chaudes', 'Hrira', 0),
-    ('Entrées Chaudes', 'Soupe de Poissons', 0),
-    ('Entrées Chaudes', 'Bourek 2 pcs', 0),
-    ('Entrées Chaudes', 'Bestilla au Poulet', 0),
-    ('Entrées Chaudes', 'Briouttes au Crevettes', 0),
-    ('Entrées Chaudes', 'Khlii (Khli3)', 0),
-    ('Entrées Chaudes', 'Gratin de Poulet', 0),
-    ('Entrées Chaudes', 'Gratin de Crevettes', 0),
-    ('Entrées Chaudes', 'Camembert BBQ Roti aux Fruits Secs et Miel', 0),
-    ('Entrées Chaudes', 'Crevettes Scampi Sauce Tartare', 0),
-    ('Entrées Chaudes', 'Burger Paradise (V-H 200g)', 0),
-    ('Entrées Chaudes', 'Poulpe à la Galicienne', 0),
-    ('Menu Enfant', 'Cheese Burger (V-H 100g)', 0),
-    ('Menu Enfant', 'Nuggets', 0),
-    ('Viandes Blanche', 'Brochette de Poulet (BBQ)', 0),
-    ('Viandes Blanche', "Poulet Biryani à l'Indienne Sauce Crémeuse", 0),
-    ('Viandes Blanche', 'Cordon Bleu', 0),
-    ('Viandes Blanche', 'Ballotine de Volaille aux Duxelles de Champignons', 0),
-    ('Viandes Blanche', 'Supreme de Poulet Gratinés aux Fruits de Mer', 0),
-    ('Viandes Rouge', 'Brochette Mixte (BBQ)', 0),
-    ('Viandes Rouge', 'Steak Hachée (BBQ) Gratiné aux Duxelle de Champignons', 0),
-    ('Viandes Rouge', "Cotelette d'Agneau (BBQ)", 0),
-    ('Viandes Rouge', 'Roulade de Veau Sauce Chasseur', 0),
-    ('Viandes Rouge', "Entrecôte de Veau (BBQ) Beurre Maître d'Hôtel", 0),
-    ('Viandes Rouge', 'Filet de Veau (BBQ)', 0),
-    ('Viandes Rouge', 'Tadjine Mhamer', 0),
-    ('Viandes Rouge', 'Foie de Veau (Sauté - Grillé - en Sauce)', 0),
-    ('Viandes Rouge', "Rôti d'Agneau Farci aux Fruits Sec", 0),
-    ('Viandes Rouge', 'Grillades Paradise (BBQ)', 0),
-    ('Viandes Rouge', 'Côte de Veau', 0),
-    ('Spécialités & Suppléments', 'Supplément Sauce Viande (Poivre/Roquefort/Champignons)', 0),
-    ('Spécialités & Suppléments', 'Spécialités Turques sur Commande', 0),
-    ('Menu Poissons', "Crevettes Grillées ou Sautées à l'Ail", 0),
-    ('Menu Poissons', 'Crevettes Décortiquées en Sauce', 0),
-    ('Menu Poissons', 'Crevettes à la Sauce Dugléré', 0),
-    ('Menu Poissons', "Calamars Frits ou Sautés à l'Ail", 0),
-    ('Menu Poissons', 'Calamars Farcis', 0),
-    ('Menu Poissons', 'Dorade Grillée (BBQ) ou au Four', 0),
-    ('Menu Poissons', 'Mélange de Poissons', 0),
-    ('Menu Poissons', 'Merlan Frit / au Four / Pané', 0),
-    ('Menu Poissons', 'Lotte Caramélisée', 0),
-    ('Menu Poissons', 'Pavé de Mérou', 0),
-    ('Menu Poissons', 'Roulade de Poisson en Croûte', 0),
-    ('Menu Poissons', 'Espadon Grillé (BBQ)', 0),
-    ('Menu Poissons', 'Crevettes Royales', 0),
-    ('Menu Poissons', 'Saumon Frais', 0),
-    ('Menu Poissons', 'Mélange Royal', 0),
-    ('Menu Poissons', "Supplément Sauce Poisson (Citronné/à l'Orange/Dugléré)", 0),
-    ('Menu Poissons', 'Paella Royale sur Commande (Min 2 Personnes)', 0),
-    ('Menu Poissons', 'Pièce de Poisson selon Disponibilité', 0),
+    ("Menu Pizza", "Pizza Margherita", 0),
+    ("Menu Pizza", "Pizza Burata", 0),
+    ("Menu Pizza", "Pizza Grand Bleu", 0),
+    ("Menu Pizza", "Pizza Fruits de Mer", 0),
+    ("Menu Pizza", "Pizza Paradise", 0),
+    ("Entrées Froides", "Salade César", 0),
+    ("Entrées Chaudes", "Poulpe à la Galicienne", 0),
+    ("Viandes Rouge", "Côte de Veau", 0),
+    ("Viandes Rouge", "Grillades Paradise (BBQ)", 0),
+    ("Viandes Blanche", "Brochette de Poulet (BBQ)", 0),
+    ("Menu Poissons", "Saumon Frais", 0),
+    ("Menu Poissons", "Paella Royale sur Commande (Min 2 Personnes)", 0),
+    ("Menu Enfant", "Cheese Burger (V-H 100g)", 0),
+    ("Menu Enfant", "Nuggets", 0),
+    ("Spécialités & Suppléments", "Supplément Sauce Viande (Poivre/Roquefort/Champignons)", 0),
+    ("Spécialités & Suppléments", "Supplément Sauce Poisson (Citronné/à l'Orange/Dugléré)", 0),
 ]
+
+SHARED_STYLE = """
+<style>
+  body {
+    background-color: #faf7f2;
+    color: #1f2421;
+    font-family: system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
+    margin: 0;
+    padding: 16px;
+    line-height: 1.5;
+  }
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  h1, h2, .menu-header {
+    background: linear-gradient(135deg, #17201b, #28382f);
+    color: #fff8e7;
+    padding: 12px 16px;
+    border-radius: 12px;
+    border-bottom: 3px solid #c59b27;
+    margin-top: 0;
+  }
+  legend {
+    background-color: #1e2923;
+    color: #fffdf7;
+    padding: 8px 14px;
+    border-radius: 10px;
+    border-right: 4px solid #c59b27;
+    width: auto;
+    font-weight: bold;
+  }
+  fieldset, .card, .menu-item, ul li {
+    list-style: none;
+    background-color: #ffffff;
+    border: 1px solid #e6dfd3;
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+  }
+  .item-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid #f1ece2;
+  }
+  .item-row:last-child {
+    border-bottom: none;
+  }
+  input[type="number"] {
+    width: 72px;
+    padding: 6px 8px;
+    border: 1px solid #cfc5b4;
+    border-radius: 8px;
+    font-size: 15px;
+  }
+  button[type="submit"], button, .btn {
+    background-color: #1e2923;
+    color: #fff8e7;
+    border: 2px solid #c59b27;
+    border-radius: 10px;
+    padding: 11px 22px;
+    font-size: 16px;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+  }
+  button[type="submit"]:hover, button:hover, .btn:hover {
+    background-color: #2b3a32;
+  }
+</style>
+"""
+
+
+def make_token(table_num: int) -> str:
+    msg = f"table:{table_num}".encode("utf-8")
+    return hmac.new(SECRET_KEY.encode("utf-8"), msg, hashlib.sha256).hexdigest()[:16]
 
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute('CREATE TABLE IF NOT EXISTS menu (id INTEGER PRIMARY KEY AUTOINCREMENT, category TEXT NOT NULL, name TEXT NOT NULL, price REAL NOT NULL)')
-    c.execute('CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY AUTOINCREMENT, table_num TEXT NOT NULL, items TEXT NOT NULL, total REAL NOT NULL, status TEXT NOT NULL DEFAULT "pending")')
-    c.execute('SELECT COUNT(*) FROM menu')
-    if c.fetchone()[0] == 0:
-        c.executemany('INSERT INTO menu (category, name, price) VALUES (?, ?, ?)', MENU_ITEMS)
+    c.execute(
+        """
+        CREATE TABLE IF NOT EXISTS menu_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT NOT NULL,
+            name TEXT NOT NULL,
+            price INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
+    c.execute(
+        """
+        CREATE TABLE IF NOT EXISTS orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            table_num INTEGER NOT NULL,
+            items_summary TEXT NOT NULL,
+            total INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'pending'
+        )
+        """
+    )
+    count = c.execute("SELECT COUNT(*) FROM menu_items").fetchone()[0]
+    if count == 0:
+        c.executemany(
+            "INSERT INTO menu_items (category, name, price) VALUES (?, ?, ?)",
+            MENU_ITEMS,
+        )
     conn.commit()
     conn.close()
 
 
-# تهيئة قاعدة البيانات عند التشغيل عبر Gunicorn أو مباشرة
-init_db()
-
-
-@app.route('/', methods=['GET', 'POST'])
-def customer_menu():
-    if request.method == 'POST':
-        table_raw = request.form.get('table_num', '').strip()
-        token = request.form.get('table_token', '').strip()
-    else:
-        table_raw = request.args.get('table', '').strip()
-        token = request.args.get('token', '').strip()
-
+def verify_table_request(table_raw: str, token: str):
     try:
-        table_no = int(table_raw)
-    except ValueError:
-        return '<html dir="rtl"><head><meta charset="utf-8"></head><body><h3>رقم الطاولة غير صالح.</h3></body></html>', 400
+        table_num = int(table_raw)
+    except (ValueError, TypeError):
+        return None
+    if table_num < 1 or table_num > NUM_TABLES:
+        return None
+    expected = make_token(table_num)
+    if not token or not hmac.compare_digest(token, expected):
+        return None
+    return table_num
 
-    if not verify_table_token(table_no, token):
+
+@app.route("/", methods=["GET", "POST"])
+def menu():
+    init_db()
+    if request.method == "POST":
+        table_raw = request.form.get("table_num", "").strip()
+        token = request.form.get("token", "").strip()
+    else:
+        table_raw = request.args.get("table", "").strip()
+        token = request.args.get("token", "").strip()
+
+    table_num = verify_table_request(table_raw, token)
+    if not table_num:
         return (
-            '<html dir="rtl"><head><meta charset="utf-8"></head><body>'
-            '<h3>رمز التحقق الخاص بالطاولة غير صالح أو تم تعديل رقم الطاولة.</h3>'
-            '<p>يرجى مسح رمز QR الموجود على الطاولة الصحيحة.</p>'
-            '</body></html>',
+            f"<!DOCTYPE html><html lang='ar' dir='rtl'><head><meta charset='utf-8'>"
+            f"<title>Paradise - تنبيه</title>{SHARED_STYLE}</head><body>"
+            f"<div class='container'><div class='card'><h2>رقم الطاولة غير صالح.</h2>"
+            f"<p>يرجى مسح رمز QR الخاص بالطاولة للدخول بشكل صحيح.</p></div></div></body></html>",
             403,
         )
 
-    table_num = str(table_no)
     conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
+    menu_items = conn.execute(
+        "SELECT id, category, name, price FROM menu_items ORDER BY id"
+    ).fetchall()
 
-    if request.method == 'POST':
-        c.execute('SELECT id, name, price FROM menu')
-        menu_items = c.fetchall()
-        chosen, total = [], 0.0
-        for item_id, name, price in menu_items:
-            qty = int(request.form.get(f'qty_{item_id}', 0))
+    if request.method == "POST":
+        chosen = []
+        total = 0
+        for iid, cat, name, price in menu_items:
+            qty_raw = request.form.get(f"qty_{iid}", "0").strip()
+            try:
+                qty = max(0, int(qty_raw))
+            except ValueError:
+                qty = 0
             if qty > 0:
-                chosen.append(f'{name} (x{qty})')
+                chosen.append(f"{name} (x{qty})")
                 total += price * qty
+
         if chosen:
-            c.execute(
-                'INSERT INTO orders (table_num, items, total, status) VALUES (?, ?, ?, "pending")',
-                (table_num, ' + '.join(chosen), total),
+            summary = " | ".join(chosen)
+            conn.execute(
+                "INSERT INTO orders (table_num, items_summary, total, status) VALUES (?, ?, ?, 'pending')",
+                (table_num, summary, total),
             )
             conn.commit()
             conn.close()
-            safe_link = f"/?table={table_no}&token={token}"
             return (
-                f'<html dir="rtl"><head><meta charset="utf-8"></head><body>'
-                f'<h2>Paradise - تم إرسال الطلب (طاولة {table_num})</h2>'
-                f'<p>المجموع: {total} دج</p>'
-                f'<a href="{safe_link}">طلب جديد</a> | <a href="/kitchen">المطبخ</a>'
-                f'</body></html>'
+                f"<!DOCTYPE html><html lang='ar' dir='rtl'><head><meta charset='utf-8'>"
+                f"<title>تم إرسال الطلب - Paradise</title>{SHARED_STYLE}</head><body>"
+                f"<div class='container'><div class='card'><h2>تم إرسال طلب الطاولة رقم {table_num}</h2>"
+                f"<p>{summary}</p>"
+                f"<a class='btn' href='/?table={table_num}&token={token}'>العودة إلى القائمة</a>"
+                f"</div></div></body></html>"
             )
 
-    c.execute('SELECT id, category, name, price FROM menu ORDER BY id ASC')
-    menu_items = c.fetchall()
     conn.close()
 
     grouped = {}
     for iid, cat, name, price in menu_items:
         grouped.setdefault(cat, []).append((iid, name, price))
 
-    sections_html = ''
+    sections_html = []
     for cat, items in grouped.items():
-        rows = ''.join([
-            f'<p style="margin:4px 0;"><b>{name}</b> ({price} دج) : '
-            f'<input type="number" name="qty_{iid}" value="0" min="0" max="20" style="width:55px;"></p>'
-            for iid, name, price in items
-        ])
-        sections_html += f'<fieldset style="margin:12px 0;padding:10px;"><legend><b>{cat}</b></legend>{rows}</fieldset>'
+        rows = []
+        for iid, name, price in items:
+            price_label = f"{price} DA" if price > 0 else "حسب القائمة"
+            rows.append(
+                f"<div class='item-row'>"
+                f"<div><b>{name}</b><div style='color:#6b655b;font-size:13px;'>{price_label}</div></div>"
+                f"<input type='number' name='qty_{iid}' min='0' value='0'>"
+                f"</div>"
+            )
+        sections_html.append(f"<fieldset><legend>{cat}</legend>{''.join(rows)}</fieldset>")
 
     return (
-        f'<html dir="rtl"><head><meta charset="utf-8"><title>Paradise - Menu</title></head>'
-        f'<body style="font-family:Arial,sans-serif;max-width:750px;margin:auto;padding:15px;">'
-        f'<h1>Paradise - قائمة الطعام (طاولة {table_num})</h1>'
-        f'<form method="POST">'
-        f'<input type="hidden" name="table_num" value="{table_no}">'
-        f'<input type="hidden" name="table_token" value="{token}">'
-        f'{sections_html}'
-        f'<button type="submit" style="padding:10px 20px;font-size:16px;">إرسال الطلب</button>'
-        f'</form><hr><a href="/kitchen">شاشة المطبخ</a></body></html>'
+        f"<!DOCTYPE html><html lang='ar' dir='rtl'><head><meta charset='utf-8'>"
+        f"<meta name='viewport' content='width=device-width, initial-scale=1'>"
+        f"<title>Paradise - قائمة الطعام</title>{SHARED_STYLE}</head><body>"
+        f"<div class='container'>"
+        f"<h2>Paradise - قائمة الطعام | طاولة رقم {table_num}</h2>"
+        f"<form method='post'>"
+        f"<input type='hidden' name='table_num' value='{table_num}'>"
+        f"<input type='hidden' name='token' value='{token}'>"
+        f"{''.join(sections_html)}"
+        f"<button type='submit'>إرسال الطلب</button>"
+        f"</form></div></body></html>"
     )
 
 
-@app.route('/kitchen')
+@app.route("/kitchen")
 def kitchen():
+    init_db()
     conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute('SELECT id, table_num, items FROM orders WHERE status="approved" ORDER BY id ASC')
-    orders = c.fetchall()
+    orders = conn.execute(
+        "SELECT id, table_num, items_summary, total, status FROM orders ORDER BY id DESC"
+    ).fetchall()
     conn.close()
-    blocks = ''.join([
-        f'<div style="border:1px solid #999;padding:10px;margin:8px 0;">'
-        f'<b>Paradise | طاولة {t} - طلب #{oid}</b><br>{items}<br>'
-        f'<a href="/done/{oid}">تم التحضير</a></div>'
-        for oid, t, items in orders
-    ])
+
+    cards = []
+    for oid, tnum, summary, total, status in orders:
+        status_ar = "قيد التحضير" if status == "pending" else "جاهز"
+        action_btn = (
+            f"<a class='btn' href='/kitchen/done/{oid}'>تم التحضير</a>"
+            if status == "pending"
+            else f"<span style='color:#2e7d32;font-weight:bold;'>✓ مكتمل</span>"
+        )
+        cards.append(
+            f"<div class='card'>"
+            f"<div style='display:flex;justify-content:space-between;align-items:center;'>"
+            f"<b>طلب #{oid} — طاولة {tnum}</b><span>{status_ar}</span></div>"
+            f"<p style='margin:8px 0;'>{summary}</p>"
+            f"{action_btn}</div>"
+        )
+
+    body_content = "".join(cards) if cards else "<div class='card'>لا توجد طلبات حالياً.</div>"
+
     return (
-        f'<html dir="rtl"><head><meta charset="utf-8"><meta http-equiv="refresh" content="5">'
-        f'<title>Paradise - المطبخ</title></head>'
-        f'<body><h2>Paradise - شاشة المطبخ</h2>{blocks or "لا توجد طلبات حالياً"}</body></html>'
+        f"<!DOCTYPE html><html lang='ar' dir='rtl'><head><meta charset='utf-8'>"
+        f"<meta http-equiv='refresh' content='5'>"
+        f"<title>Paradise - المطبخ</title>{SHARED_STYLE}</head><body>"
+        f"<div class='container'><h2>Paradise - شاشة المطبخ</h2>{body_content}</div>"
+        f"</body></html>"
     )
 
 
-@app.route('/done/<int:oid>')
-def done(oid):
+@app.route("/kitchen/done/<int:oid>")
+def kitchen_done(oid: int):
+    init_db()
     conn = sqlite3.connect(DB_NAME)
-    conn.execute('UPDATE orders SET status="done" WHERE id=?', (oid,))
+    conn.execute("UPDATE orders SET status='done' WHERE id=?", (oid,))
     conn.commit()
     conn.close()
-    return redirect('/kitchen')
+    return redirect("/kitchen")
 
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+if __name__ == "__main__":
+    init_db()
+    app.run(host="0.0.0.0", port=5000, debug=True)
