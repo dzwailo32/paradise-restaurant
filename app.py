@@ -1,12 +1,9 @@
-import hashlib
-import hmac
 import sqlite3
 from flask import Flask, request, redirect
 
 app = Flask(__name__)
 
 DB_NAME = "restaurant.db"
-SECRET_KEY = "Paradise_QR_Secret_2026_DZ"
 NUM_TABLES = 32
 
 MENU_ITEMS = [
@@ -104,11 +101,6 @@ SHARED_STYLE = """
 """
 
 
-def make_token(table_num: int) -> str:
-    msg = f"table:{table_num}".encode("utf-8")
-    return hmac.new(SECRET_KEY.encode("utf-8"), msg, hashlib.sha256).hexdigest()[:16]
-
-
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
@@ -143,16 +135,12 @@ def init_db():
     conn.close()
 
 
-def verify_table_request(table_raw: str, token: str):
+def verify_table_request(table_raw: str):
     try:
         table_num = int(table_raw)
     except (ValueError, TypeError):
         return None
     if table_num < 1 or table_num > NUM_TABLES:
-        return None
-    full_expected = make_token(table_num)
-    valid_tokens = {full_expected, full_expected[:12]}
-    if not token or not any(hmac.compare_digest(token, t) for t in valid_tokens):
         return None
     return table_num
 
@@ -162,18 +150,16 @@ def menu():
     init_db()
     if request.method == "POST":
         table_raw = request.form.get("table_num", "").strip()
-        token = request.form.get("token", "").strip()
     else:
         table_raw = request.args.get("table", "").strip()
-        token = request.args.get("token", "").strip()
 
-    table_num = verify_table_request(table_raw, token)
+    table_num = verify_table_request(table_raw)
     if not table_num:
         return (
             f"<!DOCTYPE html><html lang='ar' dir='rtl'><head><meta charset='utf-8'>"
             f"<title>Paradise - تنبيه</title>{SHARED_STYLE}</head><body>"
             f"<div class='container'><div class='card'><h2>رقم الطاولة غير صالح.</h2>"
-            f"<p>يرجى مسح رمز QR الخاص بالطاولة للدخول بشكل صحيح.</p></div></div></body></html>",
+            f"<p>يرجى فتح الرابط مع رقم طاولة صحيح بين 1 و {NUM_TABLES}.</p></div></div></body></html>",
             403,
         )
 
@@ -208,7 +194,7 @@ def menu():
                 f"<title>تم إرسال الطلب - Paradise</title>{SHARED_STYLE}</head><body>"
                 f"<div class='container'><div class='card'><h2>تم إرسال طلب الطاولة رقم {table_num}</h2>"
                 f"<p>{summary}</p>"
-                f"<a class='btn' href='/?table={table_num}&token={token}'>العودة إلى القائمة</a>"
+                f"<a class='btn' href='/?table={table_num}'>العودة إلى القائمة</a>"
                 f"</div></div></body></html>"
             )
 
@@ -239,7 +225,6 @@ def menu():
         f"<h2>Paradise - قائمة الطعام | طاولة رقم {table_num}</h2>"
         f"<form method='post'>"
         f"<input type='hidden' name='table_num' value='{table_num}'>"
-        f"<input type='hidden' name='token' value='{token}'>"
         f"{''.join(sections_html)}"
         f"<button type='submit'>إرسال الطلب</button>"
         f"</form></div></body></html>"
