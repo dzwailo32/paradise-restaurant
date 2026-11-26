@@ -123,6 +123,16 @@ def get_valid_table(table_raw: str):
     return None
 
 
+def escape_html_attr(val: str) -> str:
+    return (
+        str(val)
+        .replace("&", "&amp;")
+        .replace('"', "&quot;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
 @app.route("/", methods=["GET", "POST"])
 def customer_menu():
     init_db()
@@ -164,8 +174,12 @@ def customer_menu():
                 qty = int(request.form.get(f"qty_{item_id}", 0))
             except (ValueError, TypeError):
                 qty = 0
+            note = " ".join(request.form.get(f"note_{item_id}", "").strip().split())
             if qty > 0:
-                chosen.append(f"{name} (x{qty})")
+                if note:
+                    chosen.append(f"{name} (x{qty}) [Note: {note}]")
+                else:
+                    chosen.append(f"{name} (x{qty})")
                 total += price * qty
         if chosen:
             c.execute(
@@ -174,6 +188,7 @@ def customer_menu():
             )
             conn.commit()
             conn.close()
+            items_summary_html = "<br>".join(chosen)
             return f"""<!DOCTYPE html>
 <html lang="fr" dir="ltr">
 <head>
@@ -182,10 +197,11 @@ def customer_menu():
 <title>PARADISE - Commande envoyée</title>
 <style>
   body {{ margin:0; font-family:'Segoe UI',Tahoma,sans-serif; background:#eef2f1; color:#24302e; display:flex; align-items:center; justify-content:center; min-height:100vh; padding:16px; }}
-  .box {{ background:#fff; border-top:6px solid #586e6b; border-radius:16px; padding:28px 22px; max-width:440px; width:100%; text-align:center; box-shadow:0 10px 28px rgba(36,48,46,0.12); }}
+  .box {{ background:#fff; border-top:6px solid #586e6b; border-radius:16px; padding:28px 22px; max-width:460px; width:100%; text-align:center; box-shadow:0 10px 28px rgba(36,48,46,0.12); }}
   .brand {{ font-family:Georgia,serif; letter-spacing:4px; color:#586e6b; font-size:26px; font-weight:bold; }}
   .sub {{ font-size:13px; color:#6b7d7a; margin-bottom:18px; }}
   .ok {{ background:#e8f0ee; color:#2f4a46; padding:12px; border-radius:10px; font-weight:bold; margin:14px 0; }}
+  .recap {{ text-align:left; background:#f7faf9; border:1px solid #dce5e3; border-radius:10px; padding:12px; font-size:13px; line-height:1.5; margin:12px 0; }}
   .btn {{ display:inline-block; margin-top:12px; background:#586e6b; color:#fff; text-decoration:none; padding:12px 24px; border-radius:10px; font-weight:bold; }}
 </style>
 </head>
@@ -195,6 +211,7 @@ def customer_menu():
     <div class="sub">Restaurant</div>
     <div class="ok">✓ Commande envoyée avec succès (Table {table_num})</div>
     <p>Votre commande est en attente de validation par la caisse puis sera préparée en cuisine.</p>
+    <div class="recap">{items_summary_html}</div>
     <p><b>Total :</b> {total:.0f} DA</p>
     <a class="btn" href="/?table={table_num}">Retour au menu</a>
   </div>
@@ -219,21 +236,27 @@ def customer_menu():
         for iid, name, desc, price in items:
             price_label = f"{price:.0f} DA" if price > 0 else "Selon carte / choix"
             desc_html = f'<div class="desc">{desc}</div>' if desc else ""
+            safe_name_attr = escape_html_attr(name)
             cards += f"""
             <div class="card" id="card_{iid}">
-              <div class="info">
-                <div class="title">{name}</div>
-                {desc_html}
-                <div class="price">{price_label}</div>
-              </div>
-              <div class="ctrl">
-                <input type="hidden" name="qty_{iid}" id="qty_{iid}" value="0" data-name="{name}" data-price="{price}">
-                <button type="button" class="add-btn" id="add_{iid}" onclick="changeQty({iid}, 1)">+ Ajouter</button>
-                <div class="stepper" id="step_{iid}" style="display:none;">
-                  <button type="button" class="step-btn" onclick="changeQty({iid}, -1)">−</button>
-                  <span class="qty-num" id="num_{iid}">0</span>
-                  <button type="button" class="step-btn" onclick="changeQty({iid}, 1)">+</button>
+              <div class="card-top">
+                <div class="info">
+                  <div class="title">{name}</div>
+                  {desc_html}
+                  <div class="price">{price_label}</div>
                 </div>
+                <div class="ctrl">
+                  <input type="hidden" name="qty_{iid}" id="qty_{iid}" value="0" data-name="{safe_name_attr}" data-price="{price}">
+                  <button type="button" class="add-btn" id="add_{iid}" onclick="changeQty({iid}, 1)">+ Ajouter</button>
+                  <div class="stepper" id="step_{iid}" style="display:none;">
+                    <button type="button" class="step-btn" onclick="changeQty({iid}, -1)">−</button>
+                    <span class="qty-num" id="num_{iid}">0</span>
+                    <button type="button" class="step-btn" onclick="changeQty({iid}, 1)">+</button>
+                  </div>
+                </div>
+              </div>
+              <div class="note-box" id="note_box_{iid}" style="display:none;">
+                <input type="text" class="note-input" name="note_{iid}" id="note_{iid}" maxlength="140" placeholder="Note pour ce plat (ex: Sans oignon, Bien cuit...)" oninput="updateCart()">
               </div>
             </div>"""
 
@@ -345,16 +368,37 @@ def customer_menu():
     border-radius: 12px;
     padding: 12px 14px;
     margin-bottom: 9px;
+    transition: 0.2s;
+  }}
+  .card-top {{
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 12px;
-    transition: 0.2s;
   }}
   .card.selected {{
     border-color: var(--sage);
     background: #f6faf9;
     box-shadow: 0 4px 12px rgba(88,110,107,0.12);
+  }}
+  .note-box {{
+    margin-top: 10px;
+    padding-top: 9px;
+    border-top: 1px dashed #d5dfdd;
+  }}
+  .note-input {{
+    width: 100%;
+    padding: 8px 11px;
+    border: 1px solid #c5d2cf;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-family: inherit;
+    color: var(--text);
+    background: #fff;
+  }}
+  .note-input:focus {{
+    outline: none;
+    border-color: var(--sage);
   }}
   .title {{ font-weight: 700; font-size: 14px; color: var(--text); }}
   .desc {{ font-size: 12px; color: var(--muted); margin-top: 3px; }}
@@ -453,6 +497,12 @@ def customer_menu():
     padding: 8px 0;
     border-bottom: 1px dashed #e1e8e6;
     font-size: 14px;
+    gap: 10px;
+  }}
+  .cart-note {{
+    font-size: 12px;
+    color: var(--sage-dark);
+    margin-top: 2px;
   }}
   .confirm-btn {{
     width: 100%;
@@ -507,6 +557,14 @@ def customer_menu():
 </form>
 
 <script>
+function escapeText(str) {{
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}}
+
 function changeQty(id, delta) {{
   const inp = document.getElementById('qty_' + id);
   let val = parseInt(inp.value || '0') + delta;
@@ -518,16 +576,21 @@ function changeQty(id, delta) {{
   const addBtn = document.getElementById('add_' + id);
   const step = document.getElementById('step_' + id);
   const num = document.getElementById('num_' + id);
+  const noteBox = document.getElementById('note_box_' + id);
+  const noteInp = document.getElementById('note_' + id);
 
   if (val > 0) {{
     card.classList.add('selected');
     addBtn.style.display = 'none';
     step.style.display = 'flex';
     num.textContent = val;
+    if (noteBox) noteBox.style.display = 'block';
   }} else {{
     card.classList.remove('selected');
     addBtn.style.display = 'inline-block';
     step.style.display = 'none';
+    if (noteBox) noteBox.style.display = 'none';
+    if (noteInp) noteInp.value = '';
   }}
   updateCart();
 }}
@@ -544,11 +607,14 @@ function updateCart() {{
       const id = inp.id.replace('qty_', '');
       const name = inp.dataset.name;
       const price = parseFloat(inp.dataset.price || '0');
+      const noteEl = document.getElementById('note_' + id);
+      const noteVal = noteEl ? noteEl.value.trim() : '';
       totalCount += q;
       totalPrice += q * price;
+      const noteHtml = noteVal ? `<div class="cart-note">Note : ${{escapeText(noteVal)}}</div>` : '';
       html += `<div class="cart-row">
-        <div><b>${{name}}</b> <small>(×${{q}})</small></div>
-        <div>
+        <div><b>${{escapeText(name)}}</b> <small>(×${{q}})</small>${{noteHtml}}</div>
+        <div style="white-space:nowrap;">
           <button type="button" onclick="changeQty(${{id}}, -1)" style="padding:2px 8px;">−</button>
           <button type="button" onclick="changeQty(${{id}}, 1)" style="padding:2px 8px;">+</button>
         </div>
@@ -589,7 +655,7 @@ def kitchen():
     blocks = "".join(
         [
             f'<div style="border-left:5px solid #586e6b;background:#fff;padding:12px;margin:10px 0;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.06);">'
-            f"<b>PARADISE | Table {t} — Commande #{oid}</b><br><p>{items}</p>"
+            f"<b>PARADISE | Table {t} — Commande #{oid}</b><br><p style='margin:8px 0;line-height:1.5;'>{items}</p>"
             f'<a href="/done/{oid}" style="background:#586e6b;color:#fff;padding:6px 14px;border-radius:6px;text-decoration:none;">Prêt</a></div>'
             for oid, t, items in orders
         ]
