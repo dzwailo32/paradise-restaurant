@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import json
 import sqlite3
 from flask import Flask, request, redirect
 
@@ -94,6 +95,55 @@ MENU_ITEMS = [
 ]
 
 
+def get_recommendations(category: str, name: str, desc: str):
+    text = f"{category} {name} {desc}".lower()
+    recs = []
+
+    def add_rec(label):
+        if label not in recs:
+            recs.append(label)
+
+    if "pizza" in text:
+        add_rec("Sans tomate")
+        add_rec("Sans oignon")
+        add_rec("Bien cuit")
+        add_rec("Sans piquant")
+        if "champignon" in text or "royale" in text or "campione" in text:
+            add_rec("Sans champignons")
+    elif "salade" in text or "carpaccio" in text or "fraîcheur" in text or "entrées froides" in text:
+        add_rec("Sans salade")
+        add_rec("Sauce à part")
+        add_rec("Sans oignon")
+        add_rec("Sans citron")
+    elif "burger" in text:
+        add_rec("Sans tomate")
+        add_rec("Sans salade")
+        add_rec("Sans oignon")
+        add_rec("Bien cuit")
+    elif "viandes" in text or "brochette" in text or "steak" in text or "cotelette" in text or "roulade" in text or "entrecôte" in text or "filet" in text or "tadjine" in text or "foie" in text or "rôti" in text or "grillades" in text or "côte de veau" in text or "poulet" in text or "cordon bleu" in text or "ballotine" in text or "supreme" in text or "nuggets" in text:
+        add_rec("Bien cuit")
+        add_rec("À point")
+        add_rec("Sans sauce")
+        add_rec("Sauce à part")
+        add_rec("Sans piquant")
+    elif "poissons" in text or "crevettes" in text or "calamars" in text or "dorade" in text or "merlan" in text or "lotte" in text or "mérou" in text or "espadon" in text or "saumon" in text or "paella" in text or "poulpe" in text or "soupe de poissons" in text:
+        add_rec("Bien cuit")
+        add_rec("Citron à part")
+        add_rec("Sans ail")
+        add_rec("Sans piquant")
+    elif "sauce" in text:
+        add_rec("À part")
+        add_rec("Douce")
+        add_rec("Relevée")
+    else:
+        add_rec("Bien cuit")
+        add_rec("Sans piquant")
+        add_rec("Sans oignon")
+        add_rec("À part")
+
+    return recs[:5]
+
+
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
@@ -177,7 +227,7 @@ def customer_menu():
             note = " ".join(request.form.get(f"note_{item_id}", "").strip().split())
             if qty > 0:
                 if note:
-                    chosen.append(f"{name} (x{qty}) [Note: {note}]")
+                    chosen.append(f"{name} (x{qty}) [{note}]")
                 else:
                     chosen.append(f"{name} (x{qty})")
                 total += price * qty
@@ -237,6 +287,11 @@ def customer_menu():
             price_label = f"{price:.0f} DA" if price > 0 else "Selon carte / choix"
             desc_html = f'<div class="desc">{desc}</div>' if desc else ""
             safe_name_attr = escape_html_attr(name)
+            recs = get_recommendations(cat, name, desc)
+            chips_html = "".join(
+                f'<button type="button" class="rec-chip" onclick="toggleRec({iid}, {escape_html_attr(json.dumps(r))})">+ {escape_html_attr(r)}</button>'
+                for r in recs
+            )
             cards += f"""
             <div class="card" id="card_{iid}">
               <div class="card-top">
@@ -256,7 +311,9 @@ def customer_menu():
                 </div>
               </div>
               <div class="note-box" id="note_box_{iid}" style="display:none;">
-                <input type="text" class="note-input" name="note_{iid}" id="note_{iid}" maxlength="140" placeholder="Note pour ce plat (ex: Sans oignon, Bien cuit...)" oninput="updateCart()">
+                <div class="rec-label">Suggestions :</div>
+                <div class="rec-list">{chips_html}</div>
+                <input type="text" class="note-input" name="note_{iid}" id="note_{iid}" maxlength="140" placeholder="Ou écrire une note personnalisée..." oninput="updateCart()">
               </div>
             </div>"""
 
@@ -385,6 +442,34 @@ def customer_menu():
     margin-top: 10px;
     padding-top: 9px;
     border-top: 1px dashed #d5dfdd;
+  }}
+  .rec-label {{
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    font-weight: 600;
+  }}
+  .rec-list {{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+  }}
+  .rec-chip {{
+    background: var(--sage-light);
+    color: var(--sage-dark);
+    border: 1px solid #bfd0cc;
+    border-radius: 14px;
+    padding: 4px 10px;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.15s;
+  }}
+  .rec-chip:hover {{
+    background: var(--sage);
+    color: #fff;
+    border-color: var(--sage);
   }}
   .note-input {{
     width: 100%;
@@ -563,6 +648,23 @@ function escapeText(str) {{
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}}
+
+function toggleRec(id, recText) {{
+  const noteInp = document.getElementById('note_' + id);
+  if (!noteInp) return;
+  const parts = noteInp.value
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+  const idx = parts.findIndex(p => p.toLowerCase() === recText.toLowerCase());
+  if (idx >= 0) {{
+    parts.splice(idx, 1);
+  }} else {{
+    parts.push(recText);
+  }}
+  noteInp.value = parts.join(', ');
+  updateCart();
 }}
 
 function changeQty(id, delta) {{
