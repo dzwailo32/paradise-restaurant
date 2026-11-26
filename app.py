@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import json
 import sqlite3
+from datetime import datetime
 from flask import Flask, request, redirect
 
 app = Flask(__name__)
@@ -120,13 +121,20 @@ def get_recommendations(category: str, name: str, desc: str):
         add_rec("Sans salade")
         add_rec("Sans oignon")
         add_rec("Bien cuit")
-    elif "viandes" in text or "brochette" in text or "steak" in text or "cotelette" in text or "roulade" in text or "entrecôte" in text or "filet" in text or "tadjine" in text or "foie" in text or "rôti" in text or "grillades" in text or "côte de veau" in text or "poulet" in text or "cordon bleu" in text or "ballotine" in text or "supreme" in text or "nuggets" in text:
+    elif any(k in text for k in [
+        "viandes", "brochette", "steak", "cotelette", "roulade", "entrecôte",
+        "filet", "tadjine", "foie", "rôti", "grillades", "côte de veau",
+        "poulet", "cordon bleu", "ballotine", "supreme", "nuggets"
+    ]):
         add_rec("Bien cuit")
         add_rec("À point")
         add_rec("Sans sauce")
         add_rec("Sauce à part")
         add_rec("Sans piquant")
-    elif "poissons" in text or "crevettes" in text or "calamars" in text or "dorade" in text or "merlan" in text or "lotte" in text or "mérou" in text or "espadon" in text or "saumon" in text or "paella" in text or "poulpe" in text or "soupe de poissons" in text:
+    elif any(k in text for k in [
+        "poissons", "crevettes", "calamars", "dorade", "merlan", "lotte",
+        "mérou", "espadon", "saumon", "paella", "poulpe", "soupe de poissons"
+    ]):
         add_rec("Bien cuit")
         add_rec("Citron à part")
         add_rec("Sans ail")
@@ -151,8 +159,11 @@ def init_db():
         "CREATE TABLE IF NOT EXISTS menu (id INTEGER PRIMARY KEY AUTOINCREMENT, category TEXT NOT NULL, name TEXT NOT NULL, description TEXT DEFAULT '', price REAL NOT NULL)"
     )
     c.execute(
-        "CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY AUTOINCREMENT, table_num TEXT NOT NULL, items TEXT NOT NULL, total REAL NOT NULL, status TEXT NOT NULL DEFAULT 'pending')"
+        "CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY AUTOINCREMENT, table_num TEXT NOT NULL, items TEXT NOT NULL, total REAL NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT '')"
     )
+    cols = [r[1] for r in c.execute("PRAGMA table_info(orders)").fetchall()]
+    if "created_at" not in cols:
+        c.execute("ALTER TABLE orders ADD COLUMN created_at TEXT NOT NULL DEFAULT ''")
     c.execute("SELECT COUNT(*) FROM menu")
     if c.fetchone()[0] == 0:
         c.executemany(
@@ -232,9 +243,10 @@ def customer_menu():
                     chosen.append(f"{name} (x{qty})")
                 total += price * qty
         if chosen:
+            now_str = datetime.now().strftime("%H:%M")
             c.execute(
-                "INSERT INTO orders (table_num, items, total, status) VALUES (?, ?, ?, 'pending')",
-                (table_num, " + ".join(chosen), total),
+                "INSERT INTO orders (table_num, items, total, status, created_at) VALUES (?, ?, ?, 'pending', ?)",
+                (table_num, " + ".join(chosen), total, now_str),
             )
             conn.commit()
             conn.close()
@@ -744,28 +756,105 @@ function closeCart() {{ document.getElementById('cartModal').style.display = 'no
 </html>"""
 
 
+@app.route("/cashier")
+@app.route("/caisse")
+def cashier():
+    init_db()
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute(
+        "SELECT id, table_num, items, total, status, created_at FROM orders WHERE status IN ('pending', 'approved') ORDER BY id DESC"
+    )
+    orders = c.fetchall()
+    conn.close()
+
+    blocks = []
+    for oid, t, items, total, status, created_at in orders:
+        time_str = f" · {created_at}" if created_at else ""
+        if status == "pending":
+            badge = '<span style="background:#fff3cd;color:#856404;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700;">En attente</span>'
+            actions = (
+                f'<a href="/cashier/approve/{oid}" style="background:#1ea34a;color:#fff;padding:7px 14px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;margin-right:8px;">Valider & Envoyer en Cuisine</a>'
+                f'<a href="/cashier/cancel/{oid}" style="background:#f8d7da;color:#842029;padding:7px 12px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">Annuler</a>'
+            )
+        else:
+            badge = '<span style="background:#d1e7dd;color:#0f5132;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700;">Envoyée en cuisine</span>'
+            actions = '<span style="color:#586e6b;font-size:13px;font-weight:600;">✓ Transmise à la cuisine</span>'
+
+        blocks.append(
+            f'<div style="border-left:5px solid #586e6b;background:#fff;padding:14px;margin:12px 0;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">'
+            f'<b>PARADISE | Table {t} — Commande #{oid}<small style="color:#667572;font-weight:normal;">{time_str}</small></b>{badge}</div>'
+            f'<p style="margin:10px 0;line-height:1.5;">{items}</p>'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">'
+            f'<b>Total : {float(total):.0f} DA</b><div>{actions}</div></div></div>'
+        )
+
+    return f"""<!DOCTYPE html>
+<html lang="fr" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="5">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PARADISE - Caisse</title>
+</head>
+<body style="font-family:'Segoe UI',Tahoma,sans-serif;max-width:860px;margin:auto;padding:18px;background:#f3f6f5;color:#222d2b;">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+    <h2 style="color:#3e504e;margin:0;">PARADISE Restaurant — Caisse</h2>
+    <a href="/kitchen" style="background:#586e6b;color:#fff;padding:8px 14px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">Voir Cuisine →</a>
+  </div>
+  {''.join(blocks) if blocks else '<div style="background:#fff;padding:18px;border-radius:10px;">Aucune commande en attente ou en cours.</div>'}
+</body>
+</html>"""
+
+
+@app.route("/cashier/approve/<int:oid>")
+def cashier_approve(oid):
+    init_db()
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute("UPDATE orders SET status='approved' WHERE id=?", (oid,))
+    conn.commit()
+    conn.close()
+    return redirect("/cashier")
+
+
+@app.route("/cashier/cancel/<int:oid>")
+def cashier_cancel(oid):
+    init_db()
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute("UPDATE orders SET status='cancelled' WHERE id=?", (oid,))
+    conn.commit()
+    conn.close()
+    return redirect("/cashier")
+
+
 @app.route("/kitchen")
 def kitchen():
     init_db()
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute(
-        "SELECT id, table_num, items FROM orders WHERE status IN ('pending', 'approved') ORDER BY id ASC"
+        "SELECT id, table_num, items, created_at FROM orders WHERE status='approved' ORDER BY id ASC"
     )
     orders = c.fetchall()
     conn.close()
     blocks = "".join(
         [
             f'<div style="border-left:5px solid #586e6b;background:#fff;padding:12px;margin:10px 0;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.06);">'
-            f"<b>PARADISE | Table {t} — Commande #{oid}</b><br><p style='margin:8px 0;line-height:1.5;'>{items}</p>"
+            f"<b>PARADISE | Table {t} — Commande #{oid}</b>"
+            f"{f' <small style=\"color:#667572;\">({created_at})</small>' if created_at else ''}"
+            f"<br><p style='margin:8px 0;line-height:1.5;'>{items}</p>"
             f'<a href="/done/{oid}" style="background:#586e6b;color:#fff;padding:6px 14px;border-radius:6px;text-decoration:none;">Prêt</a></div>'
-            for oid, t, items in orders
+            for oid, t, items, created_at in orders
         ]
     )
     return (
         f'<html lang="fr" dir="ltr"><head><meta charset="utf-8"><meta http-equiv="refresh" content="5"><title>PARADISE - Cuisine</title></head>'
         f'<body style="font-family:Segoe UI,Tahoma,sans-serif;max-width:800px;margin:auto;padding:18px;background:#f3f6f5;">'
-        f'<h2 style="color:#3e504e;">PARADISE Restaurant — Cuisine</h2>{blocks or "<p>Aucune commande pour le moment.</p>"}'
+        f'<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">'
+        f'<h2 style="color:#3e504e;margin:0;">PARADISE Restaurant — Cuisine</h2>'
+        f'<a href="/cashier" style="background:#e7eeec;color:#3e504e;border:1px solid #586e6b;padding:7px 13px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;">← Caisse</a>'
+        f'</div>{blocks or "<p>Aucune commande pour le moment.</p>"}'
         f"</body></html>"
     )
 
