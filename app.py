@@ -95,62 +95,24 @@ MENU_ITEMS = [
     ("Spécialités & Suppléments", "SPÉCIALITÉS TURQUES SUR COMMANDE", "Hrira, Bourek 1 pc, Salade turque, Viande au gros sel, Dessert et boisson au choix", 0),
 ]
 
-DISH_IMAGES = {
-    "pizza_margherita": "https://images.unsplash.com/photo-1574071318508-1cdbab80d002?auto=format&fit=crop&w=400&q=80",
-    "pizza_seafood": "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=400&q=80",
-    "pizza_rich": "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=400&q=80",
-    "salad": "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=400&q=80",
-    "cheese": "https://images.unsplash.com/photo-1452195100486-9cc805987862?auto=format&fit=crop&w=400&q=80",
-    "soup": "https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=400&q=80",
-    "burger": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=400&q=80",
-    "pastry": "https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=400&q=80",
-    "gratin": "https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?auto=format&fit=crop&w=400&q=80",
-    "chicken": "https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?auto=format&fit=crop&w=400&q=80",
-    "steak": "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=400&q=80",
-    "tajine": "https://images.unsplash.com/photo-1541518763669-27fef04b14ea?auto=format&fit=crop&w=400&q=80",
-    "shrimp": "https://images.unsplash.com/photo-1559737558-2f5a35f4523b?auto=format&fit=crop&w=400&q=80",
-    "fish": "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=400&q=80",
-    "paella": "https://images.unsplash.com/photo-1534080564583-6be75777b70a?auto=format&fit=crop&w=400&q=80",
-    "sauce": "https://images.unsplash.com/photo-1472476443507-c7a5948772fc?auto=format&fit=crop&w=400&q=80",
-}
 
-
-def get_dish_image(category: str, name: str) -> str:
-    n = name.lower()
-    c = category.lower()
-    if "pizza" in c or "pizza" in n:
-        if any(k in n for k in ["crevette", "pecheur", "fruits de mer", "paradise", "grand bleu", "napolitana"]):
-            return DISH_IMAGES["pizza_seafood"]
-        if any(k in n for k in ["margherita", "4 fromage", "burata"]):
-            return DISH_IMAGES["pizza_margherita"]
-        return DISH_IMAGES["pizza_rich"]
-    if "salade" in n or "fraîcheur" in n:
-        return DISH_IMAGES["salad"]
-    if "camembert" in n:
-        return DISH_IMAGES["cheese"]
-    if "carpaccio" in n or "crevette" in n:
-        return DISH_IMAGES["shrimp"]
-    if "hrira" in n or "soupe" in n:
-        return DISH_IMAGES["soup"]
-    if "burger" in n:
-        return DISH_IMAGES["burger"]
-    if "bourek" in n or "bestilla" in n or "brioutte" in n:
-        return DISH_IMAGES["pastry"]
-    if "gratin" in n:
-        return DISH_IMAGES["gratin"]
-    if "paella" in n:
-        return DISH_IMAGES["paella"]
-    if "tadjine" in n or "turques" in n:
-        return DISH_IMAGES["tajine"]
-    if "sauce" in n:
-        return DISH_IMAGES["sauce"]
-    if "poisson" in c or any(k in n for k in ["dorade", "merlan", "lotte", "mérou", "espadon", "saumon", "calamar", "poulpe", "poisson"]):
-        return DISH_IMAGES["fish"]
-    if "blanche" in c or any(k in n for k in ["poulet", "volaille", "cordon bleu", "nuggets"]):
-        return DISH_IMAGES["chicken"]
+def get_category_badge(cat: str) -> str:
+    c = cat.lower()
+    if "pizza" in c:
+        return "PIZZA"
+    if "froides" in c:
+        return "FROIDE"
+    if "chaudes" in c:
+        return "CHAUDE"
+    if "enfant" in c:
+        return "ENFANT"
+    if "blanche" in c:
+        return "VOLAILLE"
     if "rouge" in c:
-        return DISH_IMAGES["steak"]
-    return DISH_IMAGES["steak"]
+        return "VIANDE"
+    if "poisson" in c:
+        return "MER"
+    return "SPÉCIAL"
 
 
 def get_recommendations(category: str, name: str, desc: str):
@@ -341,63 +303,69 @@ def customer_menu():
     menu_items = c.fetchall()
     conn.close()
 
-    categories = []
-    for _, cat, _, _, _ in menu_items:
-        if cat not in categories:
-            categories.append(cat)
-
-    pills_html = '<button type="button" class="cat-pill active" data-cat="ALL" onclick="selectCategory(\'ALL\', this)">Tout</button>'
-    for idx, cat in enumerate(categories):
-        cat_key = f"cat_{idx}"
-        pills_html += f'<button type="button" class="cat-pill" data-cat="{cat_key}" onclick="selectCategory(\'{cat_key}\', this)">{escape_html_attr(cat)}</button>'
-
-    cat_to_key = {cat: f"cat_{idx}" for idx, cat in enumerate(categories)}
-    dishes_payload = {}
-    cards_html = ""
-
+    grouped = {}
     for iid, cat, name, desc, price in menu_items:
-        cat_key = cat_to_key[cat]
-        price_val = float(price)
-        price_label = f"{price_val:.2f} DA" if price_val > 0 else "Selon carte / choix"
-        desc_text = desc if desc else "Préparé à la minute par notre chef"
-        img_url = get_dish_image(cat, name)
-        recs = get_recommendations(cat, name, desc)
-        safe_name_attr = escape_html_attr(name)
+        grouped.setdefault(cat, []).append((iid, name, desc, price))
 
-        dishes_payload[str(iid)] = {
-            "id": iid,
-            "category": cat,
-            "name": name,
-            "desc": desc_text,
-            "price": price_val,
-            "priceLabel": price_label,
-            "img": img_url,
-            "recs": recs,
-        }
+    cat_cards_html = ""
+    dish_sections_html = ""
 
-        cards_html += f"""
-        <article class="dish-card" id="card_{iid}" data-cat="{cat_key}" onclick="openDishModal({iid})">
-          <div class="dish-left">
-            <img src="{img_url}" alt="{safe_name_attr}" class="dish-thumb" loading="lazy">
-            <input type="hidden" name="qty_{iid}" id="qty_{iid}" value="0" data-name="{safe_name_attr}" data-price="{price_val}">
-            <input type="hidden" name="note_{iid}" id="note_{iid}" value="">
-            <button type="button" class="card-add-btn" id="add_{iid}" onclick="event.stopPropagation(); openDishModal({iid})">AJOUTER</button>
-            <div class="card-stepper" id="step_{iid}" style="display:none;" onclick="event.stopPropagation();">
-              <button type="button" class="mini-step" onclick="changeQty({iid}, -1)">−</button>
-              <span class="mini-num" id="num_{iid}">0</span>
-              <button type="button" class="mini-step" onclick="changeQty({iid}, 1)">+</button>
-            </div>
+    for idx, (cat, items) in enumerate(grouped.items()):
+        cat_key = f"cat_{idx}"
+        badge_txt = get_category_badge(cat)
+        cnt_word = "plat" if len(items) == 1 else "plats"
+
+        cat_cards_html += f"""
+        <button type="button" class="cat-tile" onclick="openCategory('{cat_key}', {escape_html_attr(json.dumps(cat))})">
+          <div class="cat-tile-top">
+            <span class="cat-tag">{badge_txt}</span>
+            <span class="cat-count">{len(items)} {cnt_word}</span>
           </div>
-          <div class="dish-right">
-            <h3 class="dish-title">{name}</h3>
-            <p class="dish-desc">{desc_text}</p>
-            <div class="dish-price">{price_label}</div>
-            <div class="dish-cat">Catégorie: {cat}</div>
-            <div class="dish-note-tag" id="note_tag_{iid}" style="display:none;"></div>
-          </div>
-        </article>"""
+          <div class="cat-tile-title">{escape_html_attr(cat)}</div>
+          <div class="cat-tile-sub">Découvrir la catégorie →</div>
+        </button>"""
 
-    dishes_json = json.dumps(dishes_payload, ensure_ascii=False).replace("</", "<\\/")
+        rows_html = ""
+        for iid, name, desc, price in items:
+            price_val = float(price)
+            price_label = f"{price_val:.0f} DA" if price_val > 0 else "Selon carte / choix"
+            desc_html = f'<div class="item-desc">{desc}</div>' if desc else ""
+            safe_name_attr = escape_html_attr(name)
+            recs = get_recommendations(cat, name, desc)
+            chips_html = "".join(
+                f'<button type="button" class="rec-chip" onclick="toggleRec({iid}, {escape_html_attr(json.dumps(r))})">+ {escape_html_attr(r)}</button>'
+                for r in recs
+            )
+
+            rows_html += f"""
+            <div class="item-card" id="card_{iid}">
+              <div class="item-top">
+                <div class="item-info">
+                  <div class="item-title">{name}</div>
+                  {desc_html}
+                  <div class="item-price">{price_label}</div>
+                </div>
+                <div class="item-ctrl">
+                  <input type="hidden" name="qty_{iid}" id="qty_{iid}" value="0" data-name="{safe_name_attr}" data-price="{price_val}">
+                  <button type="button" class="add-btn" id="add_{iid}" onclick="changeQty({iid}, 1)">+ Ajouter</button>
+                  <div class="stepper" id="step_{iid}" style="display:none;">
+                    <button type="button" class="step-btn" onclick="changeQty({iid}, -1)">−</button>
+                    <span class="qty-num" id="num_{iid}">0</span>
+                    <button type="button" class="step-btn" onclick="changeQty({iid}, 1)">+</button>
+                  </div>
+                </div>
+              </div>
+              <div class="note-box" id="note_box_{iid}" style="display:none;">
+                <div class="rec-label">Recommandations :</div>
+                <div class="rec-list">{chips_html}</div>
+                <input type="text" class="note-input" name="note_{iid}" id="note_{iid}" maxlength="140" placeholder="Note ou remarque (ex: Sans tomate, Bien cuit...)" oninput="updateCart()">
+              </div>
+            </div>"""
+
+        dish_sections_html += f"""
+        <div class="cat-panel" id="panel_{cat_key}" style="display:none;">
+          {rows_html}
+        </div>"""
 
     return f"""<!DOCTYPE html>
 <html lang="fr" dir="ltr">
@@ -408,13 +376,13 @@ def customer_menu():
 <style>
   :root {{
     --sage: #586e6b;
-    --sage-dark: #2f403e;
-    --navy: #1f3246;
+    --sage-dark: #384947;
+    --accent: #9b1c2c;
     --sage-light: #e6eeec;
-    --bg: #eef2f1;
-    --card-bg: #ffffff;
-    --text: #1c2726;
-    --muted: #5d6d6a;
+    --bg: #f1f4f3;
+    --card: #ffffff;
+    --text: #1e2a29;
+    --muted: #62726f;
   }}
   * {{ box-sizing: border-box; }}
   body {{
@@ -424,22 +392,31 @@ def customer_menu():
     color: var(--text);
     padding-bottom: 96px;
   }}
+
+  /* Header */
   .hero {{
     background: linear-gradient(180deg, #586e6b 0%, #3a4c4a 100%);
     color: #fff;
     text-align: center;
-    padding: 20px 14px 16px;
+    padding: 22px 16px 18px;
+    border-bottom: 4px solid #d5dfdd;
+  }}
+  .hero-welcome {{
+    font-size: 13px;
+    letter-spacing: 1px;
+    opacity: 0.9;
+    margin-bottom: 6px;
   }}
   .hero-frame {{
     border-top: 1.5px solid rgba(255,255,255,0.55);
     border-bottom: 1.5px solid rgba(255,255,255,0.55);
     display: inline-block;
-    padding: 6px 24px;
+    padding: 6px 26px;
   }}
   .hero h1 {{
     margin: 0;
     font-family: Georgia, 'Times New Roman', serif;
-    font-size: 26px;
+    font-size: 28px;
     letter-spacing: 5px;
     font-weight: normal;
   }}
@@ -461,379 +438,320 @@ def customer_menu():
     font-weight: 600;
   }}
 
-  .cat-bar-wrap {{
+  .container {{
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 16px 14px;
+  }}
+
+  /* Category Grid (Like Reference Image) */
+  .cat-grid {{
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }}
+  .cat-tile {{
+    background: var(--card);
+    border: 1.5px solid #dce5e3;
+    border-radius: 20px;
+    padding: 16px;
+    text-align: left;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(32, 46, 44, 0.07);
+    transition: transform 0.16s, border-color 0.2s, box-shadow 0.2s;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 132px;
+  }}
+  .cat-tile:hover {{
+    transform: translateY(-2px);
+    border-color: var(--sage);
+    box-shadow: 0 10px 22px rgba(32, 46, 44, 0.12);
+  }}
+  .cat-tile-top {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }}
+  .cat-tag {{
+    background: var(--sage-light);
+    color: var(--sage-dark);
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    padding: 4px 9px;
+    border-radius: 10px;
+  }}
+  .cat-count {{
+    font-size: 11.5px;
+    color: var(--muted);
+    font-weight: 600;
+  }}
+  .cat-tile-title {{
+    font-size: 17px;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1.25;
+  }}
+  .cat-tile-sub {{
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--sage-dark);
+    font-weight: 600;
+  }}
+
+  /* Single Category View */
+  .cat-topbar {{
+    display: none;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    background: #fff;
+    border: 1.5px solid #dce5e3;
+    border-radius: 14px;
+    padding: 10px 14px;
+    margin-bottom: 14px;
     position: sticky;
     top: 10px;
     z-index: 25;
-    max-width: 720px;
-    margin: 12px auto 6px;
-    padding: 0 12px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.06);
   }}
-  .cat-bar {{
-    background: rgba(62, 78, 76, 0.92);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border-radius: 24px;
-    padding: 10px 12px;
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-    box-shadow: 0 8px 22px rgba(25, 36, 35, 0.22);
-  }}
-  .cat-bar::-webkit-scrollbar {{ display: none; }}
-  .cat-pill {{
-    white-space: nowrap;
-    border: none;
-    border-radius: 20px;
-    padding: 8px 16px;
-    font-size: 13px;
+  .back-btn {{
+    background: var(--sage-light);
+    color: var(--sage-dark);
+    border: 1px solid var(--sage);
+    border-radius: 10px;
+    padding: 7px 12px;
+    font-size: 12.5px;
     font-weight: 700;
     cursor: pointer;
-    background: rgba(255,255,255,0.82);
-    color: #1f2d2b;
-    transition: 0.2s;
   }}
-  .cat-pill.active {{
-    background: var(--navy);
+  .back-btn:hover {{
+    background: var(--sage);
     color: #fff;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.22);
   }}
-
-  .container {{
-    max-width: 720px;
-    margin: 10px auto;
-    padding: 0 12px;
-  }}
-  .cat-header {{
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 6px 4px 10px;
-    font-size: 14px;
-    font-weight: 700;
+  .active-cat-name {{
+    font-size: 15px;
+    font-weight: 800;
     color: var(--sage-dark);
   }}
 
-  .dish-card {{
-    background: var(--card-bg);
-    border-radius: 22px;
-    padding: 14px;
-    margin-bottom: 14px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    border: 1.5px solid #dde6e4;
-    box-shadow: 0 4px 14px rgba(34, 48, 46, 0.06);
-    cursor: pointer;
-    transition: transform 0.15s, border-color 0.2s;
-  }}
-  .dish-card:active {{ transform: scale(0.99); }}
-  .dish-card.selected {{
-    border-color: var(--navy);
-    background: #f7faf9;
-  }}
-  .dish-left {{
-    width: 112px;
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-  }}
-  .dish-thumb {{
-    width: 108px;
-    height: 108px;
-    border-radius: 18px;
-    object-fit: cover;
-    background: #dfe7e5;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.1);
-  }}
-  .card-add-btn {{
-    width: 104px;
-    background: #eef3f2;
-    color: var(--navy);
-    border: 1.5px solid var(--navy);
-    border-radius: 18px;
-    padding: 6px 0;
-    font-size: 12px;
-    font-weight: 800;
-    letter-spacing: 0.4px;
-    cursor: pointer;
+  .item-card {{
+    background: var(--card);
+    border: 1.5px solid #e0e8e6;
+    border-radius: 14px;
+    padding: 13px 15px;
+    margin-bottom: 10px;
     transition: 0.2s;
   }}
-  .card-add-btn:hover {{
-    background: var(--navy);
+  .item-card.selected {{
+    border-color: var(--sage);
+    background: #f6faf9;
+    box-shadow: 0 4px 12px rgba(88,110,107,0.12);
+  }}
+  .item-top {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }}
+  .item-title {{
+    font-weight: 700;
+    font-size: 14.5px;
+    color: var(--text);
+  }}
+  .item-desc {{
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 3px;
+    line-height: 1.35;
+  }}
+  .item-price {{
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--sage-dark);
+    margin-top: 5px;
+  }}
+  .add-btn {{
+    background: var(--sage-light);
+    color: var(--sage-dark);
+    border: 1px solid var(--sage);
+    padding: 7px 15px;
+    border-radius: 20px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+  }}
+  .add-btn:hover {{
+    background: var(--sage);
     color: #fff;
   }}
-  .card-stepper {{
-    width: 104px;
+  .stepper {{
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    background: var(--navy);
+    gap: 8px;
+    background: var(--sage);
     color: #fff;
-    border-radius: 18px;
     padding: 4px 8px;
+    border-radius: 20px;
   }}
-  .mini-step {{
+  .step-btn {{
     background: rgba(255,255,255,0.2);
     border: none;
     color: #fff;
-    width: 24px;
-    height: 24px;
+    width: 26px;
+    height: 26px;
     border-radius: 50%;
-    font-size: 15px;
+    font-size: 16px;
     font-weight: bold;
     cursor: pointer;
   }}
-  .mini-num {{
-    font-size: 13px;
+  .qty-num {{
     font-weight: 800;
-  }}
-  .dish-right {{
-    flex: 1;
-    min-width: 0;
-  }}
-  .dish-title {{
-    margin: 0;
-    font-size: 16px;
-    font-weight: 700;
-    color: #162120;
-    line-height: 1.25;
-  }}
-  .dish-desc {{
-    margin: 5px 0 8px;
-    font-size: 13px;
-    color: var(--muted);
-    line-height: 1.35;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }}
-  .dish-price {{
-    font-size: 15px;
-    font-weight: 800;
-    color: var(--navy);
-  }}
-  .dish-cat {{
-    margin-top: 5px;
-    font-size: 12px;
-    color: #6b7c79;
-  }}
-  .dish-note-tag {{
-    margin-top: 6px;
-    display: inline-block;
-    background: #e6eeec;
-    color: var(--sage-dark);
-    font-size: 11.5px;
-    font-weight: 600;
-    padding: 3px 9px;
-    border-radius: 10px;
+    min-width: 18px;
+    text-align: center;
+    font-size: 14px;
   }}
 
-  /* Bottom Sheet Detail Modal */
-  .sheet-bg {{
-    position: fixed;
-    inset: 0;
-    background: rgba(15, 23, 22, 0.55);
-    display: none;
-    align-items: flex-end;
-    justify-content: center;
-    z-index: 60;
+  .note-box {{
+    margin-top: 10px;
+    padding-top: 9px;
+    border-top: 1px dashed #d5dfdd;
   }}
-  .sheet {{
-    background: #fff;
-    width: 100%;
-    max-width: 620px;
-    border-radius: 26px 26px 0 0;
-    padding: 18px 20px 24px;
-    box-shadow: 0 -10px 30px rgba(0,0,0,0.22);
-    max-height: 88vh;
-    overflow-y: auto;
-  }}
-  .sheet-top-bar {{
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-  }}
-  .sheet-close {{
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    border: none;
-    background: #eef2f1;
-    color: #222;
-    font-size: 18px;
-    cursor: pointer;
-  }}
-  .sheet-hero {{
-    display: flex;
-    gap: 16px;
-    align-items: center;
-  }}
-  .sheet-img {{
-    width: 122px;
-    height: 122px;
-    border-radius: 18px;
-    object-fit: cover;
-    flex-shrink: 0;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-  }}
-  .sheet-title {{
-    margin: 0 0 6px;
-    font-size: 18px;
-    font-weight: 800;
-    color: #162120;
-  }}
-  .sheet-desc {{
-    margin: 0 0 8px;
-    font-size: 13.5px;
+  .rec-label {{
+    font-size: 11.5px;
     color: var(--muted);
-    line-height: 1.4;
+    margin-bottom: 6px;
+    font-weight: 600;
   }}
-  .sheet-price {{
-    font-size: 16px;
-    font-weight: 800;
-    color: var(--navy);
-  }}
-  .sheet-cat {{
-    font-size: 12px;
-    color: #6b7c79;
-    margin-top: 4px;
-  }}
-  .sheet-section {{
-    margin-top: 16px;
-    padding-top: 14px;
-    border-top: 1px solid #e6ecea;
-  }}
-  .sheet-label {{
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--sage-dark);
-    margin-bottom: 8px;
-  }}
-  .rec-chips {{
+  .rec-list {{
     display: flex;
     flex-wrap: wrap;
-    gap: 7px;
-    margin-bottom: 10px;
+    gap: 6px;
+    margin-bottom: 8px;
   }}
   .rec-chip {{
-    border: 1px solid #c3d1ce;
-    background: #f1f6f5;
-    color: #263836;
-    border-radius: 16px;
-    padding: 6px 12px;
-    font-size: 12px;
+    background: var(--sage-light);
+    color: var(--sage-dark);
+    border: 1px solid #bfd0cc;
+    border-radius: 14px;
+    padding: 4px 10px;
+    font-size: 11.5px;
     font-weight: 600;
     cursor: pointer;
   }}
-  .rec-chip.active {{
-    background: var(--navy);
+  .rec-chip:hover {{
+    background: var(--sage);
     color: #fff;
-    border-color: var(--navy);
+    border-color: var(--sage);
   }}
-  .sheet-note-input {{
+  .note-input {{
     width: 100%;
-    padding: 10px 12px;
-    border: 1.5px solid #cfd9d7;
-    border-radius: 12px;
-    font-size: 13.5px;
+    padding: 8px 11px;
+    border: 1px solid #c5d2cf;
+    border-radius: 8px;
+    font-size: 12.5px;
     font-family: inherit;
+    color: var(--text);
+    background: #fff;
   }}
-  .sheet-note-input:focus {{
+  .note-input:focus {{
     outline: none;
-    border-color: var(--navy);
-  }}
-  .sheet-qty-row {{
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 14px;
-  }}
-  .sheet-stepper {{
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    background: #eef3f2;
-    padding: 6px 14px;
-    border-radius: 20px;
-  }}
-  .sheet-step-btn {{
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    border: none;
-    background: var(--navy);
-    color: #fff;
-    font-size: 18px;
-    font-weight: bold;
-    cursor: pointer;
-  }}
-  .sheet-add-btn {{
-    width: 100%;
-    margin-top: 16px;
-    background: var(--navy);
-    color: #fff;
-    border: none;
-    border-radius: 14px;
-    padding: 15px;
-    font-size: 15px;
-    font-weight: 800;
-    letter-spacing: 0.6px;
-    cursor: pointer;
+    border-color: var(--sage);
   }}
 
-  /* Floating Cart Bar */
+  /* Cart Bar & Modal */
   .cart-bar {{
     position: fixed;
     bottom: 14px;
     left: 14px;
     right: 14px;
-    max-width: 696px;
+    max-width: 732px;
     margin: auto;
-    background: var(--navy);
+    background: var(--sage-dark);
     color: #fff;
-    padding: 14px 18px;
-    border-radius: 16px;
+    padding: 13px 18px;
+    border-radius: 14px;
     display: none;
     justify-content: space-between;
     align-items: center;
-    box-shadow: 0 10px 26px rgba(18, 30, 42, 0.32);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
     z-index: 40;
     cursor: pointer;
   }}
   .cart-badge {{
     background: #fff;
-    color: var(--navy);
+    color: var(--sage-dark);
     font-weight: 800;
     padding: 3px 10px;
     border-radius: 12px;
     margin-right: 8px;
   }}
-
-  /* Cart Review Modal */
+  .modal-bg {{
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 50;
+  }}
+  .modal {{
+    background: #fff;
+    width: 100%;
+    max-width: 600px;
+    border-radius: 20px 20px 0 0;
+    padding: 20px;
+    max-height: 82vh;
+    overflow-y: auto;
+  }}
+  .modal-head {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e1e8e6;
+    padding-bottom: 10px;
+    margin-bottom: 12px;
+  }}
   .cart-row {{
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 0;
-    border-bottom: 1px dashed #dde5e3;
-    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px dashed #e1e8e6;
     font-size: 14px;
+    gap: 10px;
   }}
   .cart-note {{
     font-size: 12px;
     color: var(--sage-dark);
-    margin-top: 3px;
+    margin-top: 2px;
+  }}
+  .confirm-btn {{
+    width: 100%;
+    background: var(--sage);
+    color: #fff;
+    border: none;
+    padding: 14px;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 700;
+    margin-top: 14px;
+    cursor: pointer;
+  }}
+  .confirm-btn:hover {{
+    background: var(--sage-dark);
   }}
 </style>
 </head>
 <body>
 
 <header class="hero">
+  <div class="hero-welcome">Bienvenue à</div>
   <div class="hero-frame">
     <h1>PARADISE</h1>
     <div class="sub">Restaurant</div>
@@ -841,18 +759,22 @@ def customer_menu():
   <div><span class="table-pill">Table n° {table_num}</span></div>
 </header>
 
-<div class="cat-bar-wrap">
-  <nav class="cat-bar" id="catBar">{pills_html}</nav>
-</div>
-
 <form method="POST" id="orderForm">
   <input type="hidden" name="table_num" value="{table_num}">
+
   <main class="container">
-    <div class="cat-header">
-      <span id="currentCatLabel">Tous les plats</span>
-      <span id="visibleCount">{len(menu_items)} plats</span>
+    <div class="cat-topbar" id="catTopbar">
+      <button type="button" class="back-btn" onclick="backToCategories()">← Catégories</button>
+      <span class="active-cat-name" id="activeCatTitle"></span>
     </div>
-    <div id="cardsList">{cards_html}</div>
+
+    <div class="cat-grid" id="catGrid">
+      {cat_cards_html}
+    </div>
+
+    <div id="dishesContainer">
+      {dish_sections_html}
+    </div>
   </main>
 
   <div class="cart-bar" id="cartBar" onclick="openCart()">
@@ -860,64 +782,23 @@ def customer_menu():
     <div id="cartTotal">0 DA →</div>
   </div>
 
-  <!-- Cart Modal -->
-  <div class="sheet-bg" id="cartModal" onclick="if(event.target===this) closeCart()">
-    <div class="sheet">
-      <div class="sheet-top-bar">
-        <h3 style="margin:0;color:var(--navy);">Votre panier — Table {table_num}</h3>
-        <button type="button" class="sheet-close" onclick="closeCart()">✕</button>
+  <div class="modal-bg" id="cartModal" onclick="if(event.target===this) closeCart()">
+    <div class="modal">
+      <div class="modal-head">
+        <h3 style="margin:0;color:var(--sage-dark);">Votre panier — Table {table_num}</h3>
+        <button type="button" onclick="closeCart()" style="border:none;background:#eee;padding:6px 12px;border-radius:8px;cursor:pointer;">Fermer</button>
       </div>
       <div id="cartItems"></div>
-      <div style="display:flex;justify-content:space-between;font-weight:800;font-size:16px;margin-top:14px;">
+      <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:16px;margin-top:14px;">
         <span>Total :</span>
         <span id="modalTotal">0 DA</span>
       </div>
-      <button type="submit" class="sheet-add-btn">VALIDER ET ENVOYER LA COMMANDE</button>
+      <button type="submit" class="confirm-btn">Valider et envoyer la commande</button>
     </div>
   </div>
 </form>
 
-<!-- Dish Details Modal -->
-<div class="sheet-bg" id="dishModal" onclick="if(event.target===this) closeDishModal()">
-  <div class="sheet">
-    <div class="sheet-top-bar">
-      <span style="font-size:12.5px;font-weight:700;color:var(--muted);" id="mCatTop"></span>
-      <button type="button" class="sheet-close" onclick="closeDishModal()">✕</button>
-    </div>
-    <div class="sheet-hero">
-      <img id="mImg" src="" alt="" class="sheet-img">
-      <div>
-        <h3 class="sheet-title" id="mTitle"></h3>
-        <p class="sheet-desc" id="mDesc"></p>
-        <div class="sheet-price" id="mPrice"></div>
-        <div class="sheet-cat" id="mCat"></div>
-      </div>
-    </div>
-
-    <div class="sheet-section">
-      <div class="sheet-label">Recommandations / Remarques :</div>
-      <div class="rec-chips" id="mRecs"></div>
-      <input type="text" class="sheet-note-input" id="mNoteInput" maxlength="140" placeholder="Ajouter une remarque (ex: Sans tomate, Bien cuit...)">
-    </div>
-
-    <div class="sheet-qty-row">
-      <span style="font-weight:700;font-size:14px;">Quantité :</span>
-      <div class="sheet-stepper">
-        <button type="button" class="sheet-step-btn" onclick="changeModalQty(-1)">−</button>
-        <span id="mQty" style="font-weight:800;font-size:16px;min-width:20px;text-align:center;">1</span>
-        <button type="button" class="sheet-step-btn" onclick="changeModalQty(1)">+</button>
-      </div>
-    </div>
-
-    <button type="button" class="sheet-add-btn" onclick="confirmDishModal()">AJOUTER AU PANIER</button>
-  </div>
-</div>
-
 <script>
-const DISHES = {dishes_json};
-let activeDishId = null;
-let modalQty = 1;
-
 function escapeText(str) {{
   return String(str || '')
     .replace(/&/g, '&amp;')
@@ -926,131 +807,73 @@ function escapeText(str) {{
     .replace(/"/g, '&quot;');
 }}
 
-function selectCategory(catKey, btnEl) {{
-  document.querySelectorAll('.cat-pill').forEach(p => p.classList.remove('active'));
-  if (btnEl) btnEl.classList.add('active');
+function openCategory(catKey, catLabel) {{
+  document.getElementById('catGrid').style.display = 'none';
+  document.getElementById('catTopbar').style.display = 'flex';
+  document.getElementById('activeCatTitle').textContent = catLabel;
 
-  const cards = document.querySelectorAll('.dish-card');
-  let shown = 0;
-  cards.forEach(card => {{
-    if (catKey === 'ALL' || card.dataset.cat === catKey) {{
-      card.style.display = 'flex';
-      shown++;
-    }} else {{
-      card.style.display = 'none';
-    }}
+  document.querySelectorAll('.cat-panel').forEach(p => {{
+    p.style.display = 'none';
   }});
-
-  document.getElementById('currentCatLabel').textContent =
-    catKey === 'ALL' ? 'Tous les plats' : btnEl.textContent;
-  document.getElementById('visibleCount').textContent =
-    shown + (shown === 1 ? ' plat' : ' plats');
+  const target = document.getElementById('panel_' + catKey);
+  if (target) target.style.display = 'block';
   window.scrollTo({{ top: 0, behavior: 'smooth' }});
 }}
 
-function openDishModal(id) {{
-  const dish = DISHES[String(id)];
-  if (!dish) return;
-  activeDishId = id;
-
-  const existingQty = parseInt(document.getElementById('qty_' + id).value || '0');
-  const existingNote = document.getElementById('note_' + id).value || '';
-  modalQty = existingQty > 0 ? existingQty : 1;
-
-  document.getElementById('mCatTop').textContent = dish.category;
-  document.getElementById('mImg').src = dish.img;
-  document.getElementById('mTitle').textContent = dish.name;
-  document.getElementById('mDesc').textContent = dish.desc;
-  document.getElementById('mPrice').textContent = dish.priceLabel;
-  document.getElementById('mCat').textContent = 'Catégorie: ' + dish.category;
-  document.getElementById('mQty').textContent = modalQty;
-  document.getElementById('mNoteInput').value = existingNote;
-
-  const recsEl = document.getElementById('mRecs');
-  recsEl.innerHTML = '';
-  (dish.recs || []).forEach(r => {{
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'rec-chip';
-    b.textContent = '+ ' + r;
-    if (existingNote.toLowerCase().includes(r.toLowerCase())) {{
-      b.classList.add('active');
-    }}
-    b.onclick = () => toggleModalRec(r, b);
-    recsEl.appendChild(b);
+function backToCategories() {{
+  document.querySelectorAll('.cat-panel').forEach(p => {{
+    p.style.display = 'none';
   }});
-
-  document.getElementById('dishModal').style.display = 'flex';
+  document.getElementById('catTopbar').style.display = 'none';
+  document.getElementById('catGrid').style.display = 'grid';
+  window.scrollTo({{ top: 0, behavior: 'smooth' }});
 }}
 
-function closeDishModal() {{
-  document.getElementById('dishModal').style.display = 'none';
-  activeDishId = null;
-}}
-
-function changeModalQty(delta) {{
-  modalQty = Math.max(1, Math.min(20, modalQty + delta));
-  document.getElementById('mQty').textContent = modalQty;
-}}
-
-function toggleModalRec(recText, btn) {{
-  const inp = document.getElementById('mNoteInput');
-  const parts = inp.value.split(',').map(s => s.trim()).filter(Boolean);
+function toggleRec(id, recText) {{
+  const noteInp = document.getElementById('note_' + id);
+  if (!noteInp) return;
+  const parts = noteInp.value
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
   const idx = parts.findIndex(p => p.toLowerCase() === recText.toLowerCase());
   if (idx >= 0) {{
     parts.splice(idx, 1);
-    btn.classList.remove('active');
   }} else {{
     parts.push(recText);
-    btn.classList.add('active');
   }}
-  inp.value = parts.join(', ');
+  noteInp.value = parts.join(', ');
+  updateCart();
 }}
 
-function confirmDishModal() {{
-  if (!activeDishId) return;
-  const noteVal = document.getElementById('mNoteInput').value.trim();
-  document.getElementById('note_' + activeDishId).value = noteVal;
-  setQty(activeDishId, modalQty);
-  closeDishModal();
-}}
-
-function setQty(id, val) {{
-  val = Math.max(0, Math.min(20, val));
+function changeQty(id, delta) {{
   const inp = document.getElementById('qty_' + id);
+  let val = parseInt(inp.value || '0') + delta;
+  if (val < 0) val = 0;
+  if (val > 20) val = 20;
   inp.value = val;
 
   const card = document.getElementById('card_' + id);
   const addBtn = document.getElementById('add_' + id);
   const step = document.getElementById('step_' + id);
   const num = document.getElementById('num_' + id);
+  const noteBox = document.getElementById('note_box_' + id);
   const noteInp = document.getElementById('note_' + id);
-  const noteTag = document.getElementById('note_tag_' + id);
 
   if (val > 0) {{
     card.classList.add('selected');
     addBtn.style.display = 'none';
     step.style.display = 'flex';
     num.textContent = val;
-    if (noteInp.value.trim()) {{
-      noteTag.style.display = 'inline-block';
-      noteTag.textContent = 'Note : ' + noteInp.value.trim();
-    }} else {{
-      noteTag.style.display = 'none';
-    }}
+    if (noteBox) noteBox.style.display = 'block';
   }} else {{
     card.classList.remove('selected');
     addBtn.style.display = 'inline-block';
     step.style.display = 'none';
-    noteInp.value = '';
-    noteTag.style.display = 'none';
+    if (noteBox) noteBox.style.display = 'none';
+    if (noteInp) noteInp.value = '';
   }}
   updateCart();
-}}
-
-function changeQty(id, delta) {{
-  const cur = parseInt(document.getElementById('qty_' + id).value || '0');
-  setQty(id, cur + delta);
 }}
 
 function updateCart() {{
@@ -1065,15 +888,16 @@ function updateCart() {{
       const id = inp.id.replace('qty_', '');
       const name = inp.dataset.name;
       const price = parseFloat(inp.dataset.price || '0');
-      const noteVal = document.getElementById('note_' + id).value.trim();
+      const noteEl = document.getElementById('note_' + id);
+      const noteVal = noteEl ? noteEl.value.trim() : '';
       totalCount += q;
       totalPrice += q * price;
       const noteHtml = noteVal ? `<div class="cart-note">Note : ${{escapeText(noteVal)}}</div>` : '';
       html += `<div class="cart-row">
         <div><b>${{escapeText(name)}}</b> <small>(×${{q}})</small>${{noteHtml}}</div>
         <div style="white-space:nowrap;">
-          <button type="button" onclick="changeQty(${{id}}, -1)" style="padding:3px 9px;">−</button>
-          <button type="button" onclick="changeQty(${{id}}, 1)" style="padding:3px 9px;">+</button>
+          <button type="button" onclick="changeQty(${{id}}, -1)" style="padding:2px 8px;">−</button>
+          <button type="button" onclick="changeQty(${{id}}, 1)" style="padding:2px 8px;">+</button>
         </div>
       </div>`;
     }}
