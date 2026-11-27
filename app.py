@@ -2,7 +2,7 @@
 import json
 import sqlite3
 from datetime import datetime
-from flask import Flask, request, redirect
+from flask import Flask, request, redirect, jsonify
 
 app = Flask(__name__)
 DB_NAME = "restaurant.db"
@@ -444,7 +444,7 @@ def customer_menu():
     padding: 16px 14px;
   }}
 
-  /* Category Grid (Like Reference Image) */
+  /* Category Grid */
   .cat-grid {{
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -921,6 +921,37 @@ function closeCart() {{ document.getElementById('cartModal').style.display = 'no
 </script>
 </body>
 </html>"""
+
+
+@app.route("/api/orders")
+def api_orders():
+    init_db()
+    try:
+        since_id = max(0, int(request.args.get("since_id", "0")))
+    except (ValueError, TypeError):
+        since_id = 0
+
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute(
+        "SELECT id, table_num, items, total, status, created_at FROM orders WHERE id > ? ORDER BY id ASC",
+        (since_id,),
+    )
+    rows = c.fetchall()
+    conn.close()
+
+    data = [
+        {
+            "remote_id": r[0],
+            "table_num": r[1],
+            "items": r[2],
+            "total": float(r[3]),
+            "status": r[4],
+            "created_at": r[5],
+        }
+        for r in rows
+    ]
+    return jsonify({"orders": data})
 
 
 @app.route("/cashier")
